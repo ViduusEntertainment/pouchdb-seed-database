@@ -6,12 +6,12 @@ module.exports = class DatabaseConnector {
 		this.db_connection_info = db_connection_info;
 	}
 
-	async createDatabase(db_name, db_design) {
-		const db = this.connect(db_name);
+	async createDatabaseWithDD(db_name, db_design) {
+		const db = await this.connect(db_name);
 
 		// clear old database if enabled
 		if (db_design.clear) {
-			await db.deleteAll();
+			await db.clear();
 		}
 
 		// create index if not exists
@@ -27,9 +27,15 @@ module.exports = class DatabaseConnector {
 		return [];
 	}
 
-	connect(db_name) {
-		return new Database(_.omit(_.assign({}, this.db_connection_info, {
+	async createDatabase(db_name) {
+		return await this.connect(db_name);
+	}
+
+	async connect(db_name) {
+		const db = new Database(db_name, _.omit(_.assign({}, this.db_connection_info, {
 			name: this.db_connection_info.prefix + db_name
-		}), ['prefix']))
+		}), ['prefix']));
+		await db.updateIndexDD();
+		return db;
 	}
 }

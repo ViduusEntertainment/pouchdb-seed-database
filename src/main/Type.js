@@ -21,10 +21,10 @@ module.exports = class Type extends Interface {
 			views: {
 				all_docs: {
 					map: function (doc) {
-						if (!doc._deleted && doc.type === type_name) {
-							emit(doc.id, doc);
-						}
-					}.toString()
+							if (!doc._deleted && doc.type === type_name) {
+								emit(doc._id, doc);
+							}
+						}.toString()
 						.replace('type_name', JSON.stringify(this.name))
 				}
 			}
@@ -34,14 +34,30 @@ module.exports = class Type extends Interface {
 			obj.meta.indexes = this.indexes;
 			obj.views.index = {
 				map: function (doc) {
+					function by_string(o, s) {
+						s = s.replace(/\[(\w+)\]/g, '.$1');
+						s = s.replace(/^\./, '');
+						var a = s.split('.');
+						for (var j = 0, n = a.length; j < n; ++j) {
+							var k = a[j];
+							if (k in o) {
+								o = o[k];
+							} else {
+								return;
+							}
+						}
+						return o;
+					}
+
 					var every = true;
 					var key = [];
 					var fields = indexes;
 					for (var i = 0; every && i < fields.length; i++) {
-						if (!doc.hasOwnProperty(fields[i])) {
+						var value = by_string(doc, fields[i]);
+						if (!value) {
 							every = false;
 						}
-						key.push(doc[fields[i]]);
+						key.push(value);
 					}
 					if (every && !doc._deleted && doc.type === type_name) {
 						emit(key, doc);
@@ -50,6 +66,10 @@ module.exports = class Type extends Interface {
 					.replace('indexes', JSON.stringify(this.indexes))
 					.replace('type_name', JSON.stringify(this.name))
 			};
+		}
+
+		if (this.write_roles) {
+			obj.meta.write_roles = this.write_roles;
 		}
 
 		return obj;
@@ -70,5 +90,5 @@ module.exports = class Type extends Interface {
 		doc.type = this.name;
 		return await super.upsert(doc);
 	}
-	
+
 }

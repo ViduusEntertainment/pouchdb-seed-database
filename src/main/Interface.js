@@ -4,14 +4,19 @@ const debug = require('debug')('pouchdb-seed-database');
 
 const returnOne = result => {
 	return result.rows.length > 0
-		? result.rows[0]
+		? result.rows[0].value
 		: null;
+}
+
+const returnMany = result => {
+	return result.rows.map(row => row.value);
 }
 
 module.exports = class Interface {
 	id;
 	pdb;
 	indexes;
+	write_roles;
 
 	constructor(id, pdb) {
 		this.id = id;
@@ -36,11 +41,11 @@ module.exports = class Interface {
 		if (all_docs.length > 0) {
 			debug('interface - clear', this.pdb.name, 'deleting', all_docs.length, 'documents')
 			await this.pdb.bulkDocs(
-				all_docs.rows
-					.filter(row => !row.id.startsWith('_design/'))
+				all_docs
+					// .filter(row => !row._id.startsWith('_design/'))
 					.map(row => _.assign({
-						_id: row.value._id,
-						_rev: row.value.rev,
+						_id: row._id,
+						_rev: row._rev,
 						_deleted: true
 					}))
 			);
@@ -54,13 +59,22 @@ module.exports = class Interface {
 		if (_.get(old_index_dd, 'meta.indexes')) {
 			this.indexes = old_index_dd.meta.indexes;
 		}
+		if (_.get(old_index_dd, 'meta.write_roles')) {
+			this.write_roles = old_index_dd.meta.write_roles;
+		}
 
 		await this.upsert(this.index_dd);
 	}
 
 	async setIndex(indexes) {
-		debug('interface - setIndex', this.id, indexes)
+		debug('interface - setIndex', this.id, indexes);
 		this.indexes = indexes;
+		await this.updateIndexDD();
+	}
+
+	async setWriteRoles(write_roles) {
+		debug('interface - setPermissions', this.id, write_roles);
+		this.write_roles = write_roles;
 		await this.updateIndexDD();
 	}
 
@@ -110,9 +124,11 @@ module.exports = class Interface {
 
 		const result = await this.pdb.bulkDocs(new_documents);
 
-		return result.map(
-			doc => doc.ok === true
-				? _.omit(_.assignIn(doc, new_document_map[doc.id]), ['_id'])
+		return result.map(doc => doc.ok === true
+				? _.omit(_.assignIn(doc, new_document_map[doc.id], {
+					_id: doc.id,
+					_rev: doc.rev
+				}), ['id', 'rev', 'ok'])
 				: null
 		);
 	}
@@ -120,18 +136,21 @@ module.exports = class Interface {
 	async upsert(document) {
 		debug('interface - upsert', this.id, document);
 
-		let old_document = await this.fetch(document);
+		const old_document = await this.fetch(document);
 		if (old_document) {
-			document = _.assign({}, old_document, document);
+			document = _.assign(old_document, document);
 		} else if (document._id === undefined) {
 			document._id = v4();
 		}
 
-		return await this.pdb.put(document);
+		const result = await this.pdb.put(document);
+
+		return await this.fetch({ _id: result.id });
 	}
 
 	async fetch(document) {
-		debug('interface - fetch', this.id, document)
+		debug('interface - fetch', this.id, document);
+		
 		return document._id
 			? await this.fetchById(document)
 			: await this.fetchByIndex(document);
@@ -139,6 +158,7 @@ module.exports = class Interface {
 
 	async fetchById(document) {
 		debug('interface - fetchById', this.id, document._id);
+
 		try {
 			return await this.pdb.get(document._id);
 		} catch {
@@ -154,20 +174,21 @@ module.exports = class Interface {
 			return null;
 		
 		try {
-			return await this.pdb.query(`${this.dd_name}/index`, {
-				key: key,
-				include_docs: true
-			})
+			return returnOne(await this.pdb.query(`${this.dd_name}/index`, {
+				key: key
+			}));
 		} catch(e) {
-			console.log(e);
 			return null;
 		}
 	}
 
 	async fetchAll() {
 		debug('interface - fetchAll', this.id);
-		// const res = await this.db.query(`indexes/primary_index`);
-		const res = await this.pdb.allDocs();
-		return res.rows.map(row => row.key);
+
+		try {
+			return returnMany(await this.pdb.query(`${this.dd_name}/all_docs`));
+		} catch(e) {
+			return [];
+		}
 	}
 }

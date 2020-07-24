@@ -13,14 +13,20 @@ const returnMany = result => {
 }
 
 module.exports = class Interface {
-	id;
-	pdb;
-	indexes;
-	write_roles;
+	// name;
+	// id;
+	// pdb;
+	// indexes;
+	// write_roles;
+	// type;
 
 	constructor(id, pdb) {
 		this.id = id;
 		this.pdb = pdb;
+	}
+
+	get require_type_check() {
+		return this.type !== undefined;
 	}
 
 	get dd_name() {
@@ -32,7 +38,95 @@ module.exports = class Interface {
 	}
 
 	get index_dd() {
-		throw new Error('implement get index_dd()')
+		const obj = {
+			_id: `${this.full_dd_name}`,
+			meta: {
+				indexes: this.indexes,
+				write_roles: this.write_roles
+			},
+			views: {
+				all_docs: {
+					map: function(doc) {
+							if (!doc._deleted && (!this.require_type_check || doc.type === this.type)) {
+								emit(doc._id, doc);
+							}
+						}.toString()
+							.replace('this.require_type_check', JSON.stringify(this.require_type_check))
+							.replace('this.type', JSON.stringify(this.type))
+				}
+			},
+			validate_doc_update: function(new_doc, old_doc, user, sec) {
+				// admin edge case
+				if (user.roles.indexOf('_admin') !== -1) {
+					return;
+				}
+	
+				// restrict document type changes
+				if (old_doc && old_doc.type !== new_doc.type) {
+					throw({ forbidden: 'You do not have permission to change document type' });
+				}
+	
+				// type check
+				if (this.require_type_check && new_doc.type !== this.type) {
+					return;
+				}
+	
+				// roles check
+				var valid_roles = this.write_roles;
+				if (valid_roles != undefined) {
+					for (var i=0 ; i<valid_roles.length ; i++) {
+						if (user.roles.indexOf(valid_roles[i]) !== -1) {
+							return;
+						}
+					}
+					throw({ forbidden: 'You do not have write permissions (dd: this.full_dd_name) (user: ' + JSON.stringify(user.roles) + ') (req: ' + valid_roles + ')' });
+				}
+			}.toString()
+				.replace('this.write_roles', JSON.stringify(this.write_roles))
+				.replace('this.require_type_check', JSON.stringify(this.require_type_check))
+				.replace('this.type', JSON.stringify(this.type))
+				.replace('this.full_dd_name', JSON.stringify(this.full_dd_name))
+		};
+
+		if (this.indexes) {
+			obj.views.index = {
+				map: function (doc) {
+					function by_string(o, s) {
+						s = s.replace(/\[(\w+)\]/g, '.$1');
+						s = s.replace(/^\./, '');
+						var a = s.split('.');
+						for (var j = 0, n = a.length; j < n; ++j) {
+							var k = a[j];
+							if (k in o) {
+								o = o[k];
+							} else {
+								return;
+							}
+						}
+						return o;
+					}
+
+					var every = true;
+					var key = [];
+					var fields = this.indexes;
+					for (var i = 0; every && i < fields.length; i++) {
+						var value = by_string(doc, fields[i]);
+						if (!value) {
+							every = false;
+						}
+						key.push(value);
+					}
+					if (every && !doc._deleted && (!this.require_type_check || doc.type === this.type)) {
+						emit(key, doc);
+					}
+				}.toString()
+					.replace('this.indexes', JSON.stringify(this.indexes))
+					.replace('this.type', JSON.stringify(this.type))
+					.replace('this.require_type_check', JSON.stringify(this.require_type_check))
+			};
+		}
+
+		return obj;
 	}
 
 	async clear() {
@@ -133,13 +227,10 @@ module.exports = class Interface {
 		);
 	}
 
-	async upsert(document) {
-		debug('interface - upsert', this.id, document);
+	async insert(document) {
+		debug('interface - insert', this.id, document);
 
-		const old_document = await this.fetch(document);
-		if (old_document) {
-			document = _.assign(old_document, document);
-		} else if (document._id === undefined) {
+		if (document._id === undefined) {
 			document._id = v4();
 		}
 
@@ -148,8 +239,19 @@ module.exports = class Interface {
 		return await this.fetch({ _id: result.id });
 	}
 
+	async upsert(document) {
+		debug('interface - upsert', this.id);
+
+		const old_document = await this.fetch(document);
+		if (old_document) {
+			document = _.assign(old_document, document);
+		}
+
+		return await this.insert(document);
+	}
+
 	async fetch(document) {
-		debug('interface - fetch', this.id, document);
+		debug('interface - fetch', this.id);
 		
 		return document._id
 			? await this.fetchById(document)

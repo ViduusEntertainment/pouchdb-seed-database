@@ -32,4 +32,10 @@ module.exports = class Type extends Interface {
 		return await super.upsert(doc);
 	}
 
+	async insert(doc) {
+		debug('type - insert');
+		doc.type = this.name;
+		return await super.insert(doc);
+	}
+
 }

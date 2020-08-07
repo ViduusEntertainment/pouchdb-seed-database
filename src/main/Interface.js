@@ -150,18 +150,20 @@ module.exports = class Interface {
 		debug('interface - updateIndexDD');
 
 		const old_index_dd = await this.fetch({ _id: this.full_dd_name });
-		if (_.get(old_index_dd, 'meta.indexes')) {
+		if (!this._push_indexes && _.get(old_index_dd, 'meta.indexes')) {
 			this.indexes = old_index_dd.meta.indexes;
 		}
-		if (_.get(old_index_dd, 'meta.write_roles')) {
+		if (!this._push_indexes && _.get(old_index_dd, 'meta.write_roles')) {
 			this.write_roles = old_index_dd.meta.write_roles;
 		}
 
 		await this.upsert(this.index_dd);
+		this._push_indexes = false;
 	}
 
 	async setIndex(indexes) {
 		debug('interface - setIndex', this.id, indexes);
+		this._push_indexes = true;
 		this.indexes = indexes;
 		await this.updateIndexDD();
 	}
@@ -183,6 +185,27 @@ module.exports = class Interface {
 			key.push(document[index]);
 		}
 		return key;
+	}
+
+	documentToSearchKey(document) {
+		if (!this.indexes)
+			return [[null], [{}]];
+
+		let start_key = [];
+		let end_key = [];
+
+		for (let index of this.indexes) {
+			if (document.hasOwnProperty(index)) {
+				start_key.push(document[index]);
+				end_key.push(document[index]);
+			} else {
+				start_key.push(null);
+				end_key.push({});
+				break;
+			}
+		}
+
+		return [start_key, end_key];
 	}
 
 	async upsertBulk(documents) {
@@ -250,6 +273,14 @@ module.exports = class Interface {
 		return await this.insert(document);
 	}
 
+	async delete(document) {
+		debug('interface - delete', this.id);
+
+		document._deleted = true;
+
+		return this.upsert(document);
+	}
+
 	async fetch(document) {
 		debug('interface - fetch', this.id);
 		
@@ -281,6 +312,20 @@ module.exports = class Interface {
 			}));
 		} catch(e) {
 			return null;
+		}
+	}
+
+	async fetchAllByPartialIndex(document) {
+		debug('interface - fetchAllByPartialIndex', this.id);
+
+		try {
+			const [startkey, endkey] = this.documentToSearchKey(document);
+			return returnMany(await this.pdb.query(`${this.dd_name}/index`, {
+				startkey,
+				endkey
+			}));
+		} catch(e) {
+			return [];
 		}
 	}
 

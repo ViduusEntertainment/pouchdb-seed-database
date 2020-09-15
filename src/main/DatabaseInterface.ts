@@ -1,44 +1,68 @@
-const _ = require('lodash');
-const { v4 } = require('uuid');
-const debug = require('debug')('pouchdb-seed-database');
+import _ from 'lodash';
+import { v4 } from 'uuid';
+import PouchDB from 'pouchdb';
+import debug from './Debug';
 
-const returnOne = result => {
+const emit = (... args: any) => {};
+
+function returnOne<T>(result): T {
 	return result.rows.length > 0
 		? result.rows[0].value
 		: null;
 }
 
-const returnMany = result => {
+function returnMany<T>(result): T[] {
 	return result.rows.map(row => row.value);
 }
 
-module.exports = class Interface {
-	// name;
-	// id;
-	// pdb;
-	// indexes;
-	// write_roles;
-	// type;
+export type DocumentId = string;
 
-	constructor(id, pdb) {
+export type DocumentIndex = string;
+
+export interface Document {
+	_id?: DocumentId;
+	_rev?: string;
+	_deleted?: boolean;
+	type?: string;
+}
+
+export interface DesignDocument extends Document {
+	meta: any;
+	views: {
+		all_docs: any,
+		index?: any
+	};
+	validate_doc_update: any;
+}
+
+export default class DatabaseInterface {
+	name: string;
+	id: string;
+	pdb: PouchDB;
+	indexes: string[];
+	write_roles: string[];
+	type: string;
+	_push_indexes: boolean;
+
+	constructor(id: string, pdb: PouchDB) {
 		this.id = id;
 		this.pdb = pdb;
 	}
 
-	get require_type_check() {
+	public get require_type_check(): boolean {
 		return this.type !== undefined;
 	}
 
-	get dd_name() {
+	public get dd_name(): string {
 		throw new Error('implement get dd_name()')
 	}
 
-	get full_dd_name() {
+	public get full_dd_name(): string {
 		return `_design/${this.dd_name}`;
 	}
 
-	get index_dd() {
-		const obj = {
+	protected get index_dd(): DesignDocument {
+		const obj: DesignDocument = {
 			_id: `${this.full_dd_name}`,
 			meta: {
 				indexes: this.indexes,
@@ -129,7 +153,11 @@ module.exports = class Interface {
 		return obj;
 	}
 
-	async clear() {
+	/**
+	 * Clears all documents returned by this interface. This does not delete the document from
+	 * CouchDB but merely flags the document as deleted using the _deleted field.
+	 */
+	public async clear(): Promise<void> {
 		debug('interface - clear');
 		const all_docs = await this.fetchAll();
 		if (all_docs.length > 0) {
@@ -146,10 +174,14 @@ module.exports = class Interface {
 		}
 	}
 
-	async updateIndexDD() {
+	/**
+	 * This function will update the index design document for this interface. This design document
+	 * is used to entire uniqueness across the interface.
+	 */
+	public async updateIndexDD(): Promise<void> {
 		debug('interface - updateIndexDD');
 
-		const old_index_dd = await this.fetch({ _id: this.full_dd_name });
+		const old_index_dd: DesignDocument = await this.fetch({ _id: this.full_dd_name });
 		if (!this._push_indexes && _.get(old_index_dd, 'meta.indexes')) {
 			this.indexes = old_index_dd.meta.indexes;
 		}
@@ -161,33 +193,33 @@ module.exports = class Interface {
 		this._push_indexes = false;
 	}
 
-	async setIndex(indexes) {
+	public async setIndex(indexes: string[]): Promise<void> {
 		debug('interface - setIndex', this.id, indexes);
 		this._push_indexes = true;
 		this.indexes = indexes;
 		await this.updateIndexDD();
 	}
 
-	async setWriteRoles(write_roles) {
+	public async setWriteRoles(write_roles: string[]): Promise<void>  {
 		debug('interface - setPermissions', this.id, write_roles);
 		this.write_roles = write_roles;
 		await this.updateIndexDD();
 	}
 
-	documentToKey(document) {
+	protected documentToKey(document: Document): DocumentIndex {
 		if (!this.indexes)
 			return null;
 
-		let key = [];
+		let key: (string | number | symbol)[] = [];
 		for (let index of this.indexes) {
 			if (!document.hasOwnProperty(index))
 				return null;
 			key.push(document[index]);
 		}
-		return key;
+		return key.toString();
 	}
 
-	documentToSearchKey(document) {
+	protected documentToSearchKey(document: Document): [any[], any[]] {
 		if (!this.indexes)
 			return [[null], [{}]];
 
@@ -208,19 +240,19 @@ module.exports = class Interface {
 		return [start_key, end_key];
 	}
 
-	async upsertBulk(documents) {
+	public async upsertBulk(documents: Document[]): Promise<Document[]> {
 		debug('interface - upsertBulk', this.id, documents);
 
-		const old_documents = await this.fetchAll();
+		const old_documents: Document[] = await this.fetchAll();
 
-		const key_to_old_document = Object.fromEntries(old_documents
+		const key_to_old_document: Record<DocumentIndex, Document> = Object.fromEntries(old_documents
 			.map(doc => [this.documentToKey(doc), doc])
 			.filter(([key, doc]) => key != null));
 
-		const id_to_old_document = Object.fromEntries(old_documents
+		const id_to_old_document: Record<DocumentId, Document>  = Object.fromEntries(old_documents
 			.map(doc => [doc._id, doc]));
 
-		const new_documents = documents.map(doc => {
+		const new_documents: Document[] = documents.map(doc => {
 			let old_doc;
 
 			if (doc._id)
@@ -236,7 +268,7 @@ module.exports = class Interface {
 			}
 		});
 
-		const new_document_map = Object.fromEntries(new_documents
+		const new_document_map: Record<DocumentId, Document> = Object.fromEntries(new_documents
 			.map(doc => [doc._id, doc]));
 
 		const result = await this.pdb.bulkDocs(new_documents);
@@ -250,7 +282,7 @@ module.exports = class Interface {
 		);
 	}
 
-	async insert(document) {
+	async insert(document: Document): Promise<Document> {
 		debug('interface - insert', this.id, document);
 
 		if (document._id === undefined) {
@@ -262,7 +294,7 @@ module.exports = class Interface {
 		return await this.fetch({ _id: result.id });
 	}
 
-	async upsert(document) {
+	async upsert(document: Document): Promise<Document> {
 		debug('interface - upsert', this.id);
 
 		const old_document = await this.fetch(document);
@@ -273,7 +305,7 @@ module.exports = class Interface {
 		return await this.insert(document);
 	}
 
-	async delete(document) {
+	public async delete(document: Document): Promise<Document> {
 		debug('interface - delete', this.id);
 
 		document._deleted = true;
@@ -281,7 +313,15 @@ module.exports = class Interface {
 		return this.upsert(document);
 	}
 
-	async fetch(document) {
+	public async deleteBulk(documents: Document[]): Promise<Document[]> {
+		debug('interface - deleteBulk', this.type, documents.length);
+
+		documents.forEach(document => document._deleted = true);
+
+		return this.upsertBulk(documents);
+	}
+
+	public async fetch<T extends Document>(document: Document): Promise<T> {
 		debug('interface - fetch', this.id);
 		
 		return document._id
@@ -289,7 +329,7 @@ module.exports = class Interface {
 			: await this.fetchByIndex(document);
 	}
 
-	async fetchById(document) {
+	public async fetchById<T extends Document>(document: Document): Promise<T> {
 		debug('interface - fetchById', this.id, document._id);
 
 		try {
@@ -299,7 +339,7 @@ module.exports = class Interface {
 		}
 	}
 
-	async fetchByIndex(document) {
+	async fetchByIndex<T extends Document>(document: Document): Promise<T> {
 		const key = this.documentToKey(document);
 		debug('interface - fetchByIndex', this.id, key);
 
@@ -315,7 +355,7 @@ module.exports = class Interface {
 		}
 	}
 
-	async fetchAllByPartialIndex(document) {
+	async fetchAllByPartialIndex(document: Document): Promise<Document[]> {
 		debug('interface - fetchAllByPartialIndex', this.id);
 
 		try {
@@ -329,7 +369,7 @@ module.exports = class Interface {
 		}
 	}
 
-	async fetchAll() {
+	async fetchAll(): Promise<Document[]> {
 		debug('interface - fetchAll', this.id);
 
 		try {

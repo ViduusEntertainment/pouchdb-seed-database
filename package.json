@@ -2,9 +2,10 @@
   "name": "pouchdb-seed-database",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "compile": "tsc"
   },
   "author": "",
   "license": "ISC",
@@ -13,5 +14,8 @@
     "lodash": "^4.17.15",
     "pouchdb": "^7.2.1",
     "uuid": "^7.0.3"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/"
   }
 }

@@ -1,9 +1,7 @@
-const debug = require('debug')('pouchdb-seed-database');
-const Interface = require('./Interface');
+import DatabaseInterface, { Document } from './DatabaseInterface';
+import debug from './Debug';
 
-module.exports = class Type extends Interface {
-	// name;
-	// indexes;
+export default class Type extends DatabaseInterface {
 
 	constructor(name, db) {
 		super(`${db.id}/_design/type_${name}`, db.pdb);
@@ -12,11 +10,11 @@ module.exports = class Type extends Interface {
 		this.indexes = ['_id'];
 	}
 
-	get dd_name() {
+	public get dd_name(): string {
 		return `type_${this.name}`;
 	}
 
-	async upsertBulk(documents) {
+	public async upsertBulk(documents): Promise<Document[]> {
 		debug('type - upsertBulk');
 		return await super.upsertBulk(
 			documents.map(doc => {
@@ -26,13 +24,13 @@ module.exports = class Type extends Interface {
 		);
 	}
 
-	async upsert(doc) {
+	public async upsert(doc: Document): Promise<Document> {
 		debug('type - upsert');
 		doc.type = this.name;
 		return await super.upsert(doc);
 	}
 
-	async insert(doc) {
+	public async insert(doc: Document): Promise<Document> {
 		debug('type - insert');
 		doc.type = this.name;
 		return await super.insert(doc);

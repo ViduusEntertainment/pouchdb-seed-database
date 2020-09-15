@@ -1,31 +1,41 @@
-const PouchDB = require('./PouchDB');
-const Type = require('./Type');
-const _ = require('lodash');
-const { v4 } = require('uuid');
-const debug = require('debug')('pouchdb-seed-database');
-const Interface = require('./Interface');
-const axios = require('axios');
+import DatabaseInterface from './DatabaseInterface';
+import Type from './Type';
+import debug from './Debug';
+import axios from 'axios';
+import _ from 'lodash';
+import PouchDB from './PouchDB';
+import { URL } from 'url';
 
-const connect = (db_connection_info) => {
+function connect(db_connection_info: DatabaseConnectionInfo): PouchDB {
 	return new PouchDB(_.assignIn({}, db_connection_info));
 }
 
-module.exports = class Database extends Interface {
-	// db_connection_info;
-	// indexes;
-	// name;
+export interface DatabaseConnectionInfo {
+	prefix: string,
+	name: string,
+}
 
-	constructor(db_name, db_connection_info) {
+export interface DatabaseSecurityGroup {
+	members?: string[]
+	roles?: string[]
+}
+
+export default class Database extends DatabaseInterface {
+	db_connection_info: DatabaseConnectionInfo;
+	admins: DatabaseSecurityGroup;
+	members: DatabaseSecurityGroup;
+
+	constructor(db_name: string, db_connection_info: DatabaseConnectionInfo) {
 		super(`${db_connection_info.name}`, connect(db_connection_info));
 		this.db_connection_info = db_connection_info;
 		this.name = db_name;
 	}
 
-	get dd_name() {
+	public get dd_name(): string {
 		return `global`;
 	}
 
-	async updateSecurityDD() {
+	public async updateSecurityDD() {
 		debug('database - updateSecurityDD');
 
 		const url = new URL(this.pdb.name + '/_security');
@@ -57,7 +67,7 @@ module.exports = class Database extends Interface {
 		await axios.put(url.href, doc);
 	}
 
-	async setReadRoles(member_roles = [], admin_roles = []) {
+	async setReadRoles(member_roles: string[] = [], admin_roles: string[] = []) {
 		debug('database - setSecurity', this.id, member_roles, admin_roles);
 		this.members = {
 			roles: member_roles
@@ -69,14 +79,14 @@ module.exports = class Database extends Interface {
 		await this.updateSecurityDD();
 	}
 
-	async destroy() {
+	public async destroy(): Promise<void> {
 		debug('database - destroy');
 		await this.pdb.destroy();
 		this.pdb = connect(this.db_connection_info);
 		await this.updateIndexDD();
 	}
 
-	async createType(type_name) {
+	public async createType(type_name: string): Promise<Type> {
 		debug('database - createType', type_name);
 		const type = new Type(type_name, this);
 		await type.updateIndexDD();

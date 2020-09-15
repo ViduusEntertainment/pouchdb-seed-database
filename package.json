@@ -11,7 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "debug": "^4.1.1",
-    "lodash": "^4.17.15",
+    "lodash": "^4.17.19",
     "pouchdb": "^7.2.1",
     "uuid": "^7.0.3"
   },

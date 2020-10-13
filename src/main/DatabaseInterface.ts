@@ -17,7 +17,7 @@ function returnMany<T>(result): T[] {
 
 export type DocumentId = string;
 
-export type DocumentIndex = string;
+export type DocumentIndex = (string | number | symbol)[];
 
 export interface Document {
 	_id?: DocumentId;
@@ -189,8 +189,10 @@ export default class DatabaseInterface {
 			this.write_roles = old_index_dd.meta.write_roles;
 		}
 
-		await this.upsert(this.index_dd);
-		this._push_indexes = false;
+		if (this._push_indexes) {
+			await this.upsert(this.index_dd);
+			this._push_indexes = false;
+		}
 	}
 
 	public async setIndex(indexes: string[]): Promise<void> {
@@ -210,13 +212,13 @@ export default class DatabaseInterface {
 		if (!this.indexes)
 			return null;
 
-		let key: (string | number | symbol)[] = [];
+		let key: DocumentIndex = [];
 		for (let index of this.indexes) {
 			if (!document.hasOwnProperty(index))
 				return null;
 			key.push(document[index]);
 		}
-		return key.toString();
+		return key;
 	}
 
 	protected documentToSearchKey(document: Document): [any[], any[]] {
@@ -245,9 +247,10 @@ export default class DatabaseInterface {
 
 		const old_documents: Document[] = await this.fetchAll();
 
-		const key_to_old_document: Record<DocumentIndex, Document> = Object.fromEntries(old_documents
-			.map(doc => [this.documentToKey(doc), doc])
-			.filter(([key, doc]) => key != null));
+		const key_to_old_document: Record<string, Document> = Object.fromEntries(old_documents
+			.map((doc) : [DocumentIndex, Document] => [this.documentToKey(doc), doc])
+			.filter(([key, doc]) => key != null)
+			.map(([key, doc]) => [key.toString(), doc]));
 
 		const id_to_old_document: Record<DocumentId, Document>  = Object.fromEntries(old_documents
 			.map(doc => [doc._id, doc]));
@@ -258,8 +261,12 @@ export default class DatabaseInterface {
 			if (doc._id)
 				old_doc = id_to_old_document[doc._id];
 
-			if (!old_doc)
-				old_doc = key_to_old_document[this.documentToKey(doc)];
+			if (!old_doc) {
+				const key = this.documentToKey(doc);
+				if (key) {
+					old_doc = key_to_old_document[key.toString()];
+				}
+			}
 
 			if (old_doc) {
 				return _.assign({}, old_doc, doc)

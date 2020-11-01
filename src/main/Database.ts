@@ -79,11 +79,13 @@ export default class Database extends DatabaseInterface {
 		await this.updateSecurityDD();
 	}
 
-	public async destroy(): Promise<void> {
+	public async destroy(opts = {recreate: true}): Promise<void> {
 		debug('database - destroy');
 		await this.pdb.destroy();
-		this.pdb = connect(this.db_connection_info);
-		await this.updateIndexDD();
+		if (opts.recreate) {
+			this.pdb = connect(this.db_connection_info);
+			await this.updateIndexDD();
+		}
 	}
 
 	public async createType(type_name: string): Promise<Type> {

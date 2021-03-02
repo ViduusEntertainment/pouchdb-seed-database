@@ -162,15 +162,14 @@ export default class DatabaseInterface {
 		const all_docs = await this.fetchAll();
 		if (all_docs.length > 0) {
 			debug('interface - clear', this.pdb.name, 'deleting', all_docs.length, 'documents')
-			await this.pdb.bulkDocs(
-				all_docs
-					// .filter(row => !row._id.startsWith('_design/'))
-					.map(row => _.assign({
-						_id: row._id,
-						_rev: row._rev,
-						_deleted: true
-					}))
-			);
+			await Promise.all(_.chunk(
+				all_docs.map(doc => _.assign({
+					_id: doc._id,
+					_rev: doc._rev,
+					_deleted: true
+				})),
+				100
+			).map(chunk => this.pdb.bulkDocs(chunk)))
 		}
 	}
 
@@ -189,7 +188,7 @@ export default class DatabaseInterface {
 			this.write_roles = old_index_dd.meta.write_roles;
 		}
 
-		if (this._push_indexes) {
+		if (this._push_indexes || !old_index_dd) {
 			await this.upsert(this.index_dd);
 			this._push_indexes = false;
 		}
@@ -243,7 +242,7 @@ export default class DatabaseInterface {
 	}
 
 	public async upsertBulk(documents: Document[]): Promise<Document[]> {
-		debug('interface - upsertBulk', this.id, documents);
+		debug('interface - upsertBulk', this.id, documents.length);
 
 		const old_documents: Document[] = await this.fetchAll();
 
@@ -278,9 +277,12 @@ export default class DatabaseInterface {
 		const new_document_map: Record<DocumentId, Document> = Object.fromEntries(new_documents
 			.map(doc => [doc._id, doc]));
 
-		const result = await this.pdb.bulkDocs(new_documents);
+		const result = (await Promise.all(_.chunk(
+			new_documents,
+			100
+		).map(chunk => this.pdb.bulkDocs(chunk)))).flat();
 
-		return result.map(doc => doc.ok === true
+		return result.map((doc: any) => doc.ok === true
 				? _.omit(_.assignIn(doc, new_document_map[doc.id], {
 					_id: doc.id,
 					_rev: doc.rev
@@ -290,7 +292,7 @@ export default class DatabaseInterface {
 	}
 
 	async insert(document: Document): Promise<Document> {
-		debug('interface - insert', this.id, document);
+		debug('interface - insert', this.id, document._id);
 
 		if (document._id === undefined) {
 			document._id = v4();

@@ -3,11 +3,11 @@ import Type from './Type';
 import debug from './Debug';
 import axios from 'axios';
 import _ from 'lodash';
-import PouchDB from './PouchDB';
+import * as PouchDB from 'pouchdb';
 import { URL } from 'url';
 
-function connect(db_connection_info: DatabaseConnectionInfo): PouchDB {
-	return new PouchDB(_.assignIn({}, db_connection_info));
+function connect(db_connection_info: DatabaseConnectionInfo): PouchDB.Static {
+	return new PouchDB(db_connection_info);
 }
 
 export interface DatabaseConnectionInfo {

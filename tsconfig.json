@@ -2,6 +2,7 @@
 	"compilerOptions": {
 		"lib": ["es2019", "es2020.promise", "es2020.bigint", "es2020.string", "ES6"],
 		"experimentalDecorators": true,
+		"allowSyntheticDefaultImports": true,
 		"module": "commonjs",
 		"esModuleInterop": true,
 		"skipLibCheck": true,

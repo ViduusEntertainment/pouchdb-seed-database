@@ -3,10 +3,10 @@ import Type from './Type';
 import debug from './Debug';
 import axios from 'axios';
 import _ from 'lodash';
-import * as PouchDB from 'pouchdb';
+import PouchDB from 'pouchdb';
 import { URL } from 'url';
 
-function connect(db_connection_info: DatabaseConnectionInfo): PouchDB.Static {
+function connect(db_connection_info: DatabaseConnectionInfo): any {
 	return new PouchDB(db_connection_info);
 }
 

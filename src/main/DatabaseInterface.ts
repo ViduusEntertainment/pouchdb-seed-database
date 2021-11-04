@@ -38,13 +38,13 @@ export interface DesignDocument extends Document {
 export default class DatabaseInterface {
 	name: string;
 	id: string;
-	pdb: PouchDB;
+	pdb: any;
 	indexes: string[];
 	write_roles: string[];
 	type: string;
 	_push_indexes: boolean;
 
-	constructor(id: string, pdb: PouchDB) {
+	constructor(id: string, pdb: any) {
 		this.id = id;
 		this.pdb = pdb;
 	}

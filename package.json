@@ -19,10 +19,13 @@
     "axios": "^0.21.1",
     "debug": "^4.1.1",
     "lodash": "^4.17.15",
-    "pouchdb": "^7.2.1",
+    "pouchdb": "^7.2.2",
     "uuid": "^7.0.3"
   },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/"
+  },
+  "devDependencies": {
+    "@types/node": "^16.9.1"
   }
 }

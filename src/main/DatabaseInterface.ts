@@ -213,9 +213,9 @@ export default class DatabaseInterface {
 
 		let key: DocumentIndex = [];
 		for (let index of this.indexes) {
-			if (!document.hasOwnProperty(index))
+			if (!_.has(document, index))
 				return null;
-			key.push(document[index]);
+			key.push(_.get(document, index));
 		}
 		return key;
 	}
@@ -228,9 +228,10 @@ export default class DatabaseInterface {
 		let end_key = [];
 
 		for (let index of this.indexes) {
-			if (document.hasOwnProperty(index)) {
-				start_key.push(document[index]);
-				end_key.push(document[index]);
+			if (_.has(document, index)) {
+				const val = _.get(document, index);
+				start_key.push(val);
+				end_key.push(val);
 			} else {
 				start_key.push(null);
 				end_key.push({});
